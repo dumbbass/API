@@ -5,6 +5,8 @@ require_once '../Connection/connection.php';
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
+header("Access-Control-Allow-Credentials: true");
+header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     // Set CORS headers for preflight request
@@ -12,6 +14,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
     header("Access-Control-Allow-Headers: Content-Type, Authorization");
     exit(0);  // Exit after responding to OPTIONS request
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if ($action === 'register') {
+        echo json_encode($userHandler->register($data));
+    } elseif ($action === 'login') {
+        echo json_encode($userHandler->login($data));
+    } elseif ($action === 'getUserProfile') {
+        // Assuming userId is passed through GET request
+        $userId = $_GET['id'] ?? null; 
+        if ($userId) {
+            echo json_encode($userHandler->getUserProfile($userId));
+        } else {
+            echo json_encode(['status' => false, 'message' => 'User ID is required']);
+        }
+    } else {
+        echo json_encode(['status' => false, 'message' => 'Invalid action']);
+    }
 }
 
 $routes = new Routes();
@@ -25,31 +45,37 @@ class UserHandler {
         $database = new Database();
         $this->conn = $database->getConnection();
     }
-    
+
     public function getUserProfile($userId) {
+        if (!is_numeric($userId) || $userId <= 0) {
+            return [
+                'status' => false,
+                'message' => 'Invalid user ID'
+            ];
+        }
+
         $query = "SELECT firstname, lastname, date_of_birth, gender, home_address, contact_number, email FROM users WHERE id = :id";
-    
         try {
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $userId);
             $stmt->execute();
+
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    
             if ($user) {
                 return [
                     'status' => true,
                     'user' => $user
                 ];
+            } else {
+                return [
+                    'status' => false,
+                    'message' => 'User not found'
+                ];
             }
-    
-            return [
-                'status' => false,
-                'message' => 'User not found'
-            ];
         } catch (PDOException $e) {
             return [
                 'status' => false,
-                'message' => $e->getMessage()
+                'message' => 'Database error: ' . $e->getMessage()
             ];
         }
     }
@@ -144,6 +170,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode($userHandler->register($data));
     } elseif ($action === 'login') {
         echo json_encode($userHandler->login($data));
+    } else {
+        echo json_encode(['status' => false, 'message' => 'Invalid action']);
+    }
+}
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if ($action === 'getUserProfile') {
+        $userId = $_GET['id'] ?? null;
+        if ($userId) {
+            $response = $userHandler->getUserProfile($userId);
+            echo json_encode($response);
+        } else {
+            echo json_encode(['status' => false, 'message' => 'User ID is required']);
+        }
     } else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
