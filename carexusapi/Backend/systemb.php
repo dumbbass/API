@@ -26,8 +26,35 @@ class AdminHandler {
         $this->conn = $database->getConnection();
     }
 
+    // Function to check if the email already exists
+    public function checkEmail($email) {
+        try {
+            $query = "SELECT COUNT(*) as count FROM users WHERE email = :email";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':email', $email);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // If email exists, return true, else false
+            if ($result['count'] > 0) {
+                return ['exists' => true];
+            } else {
+                return ['exists' => false];
+            }
+        } catch (PDOException $e) {
+            return ['status' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    // Function for registration
     public function register($data) {
-        // Insert query with NULL values for non-required fields, but email is now a required field
+        // Check if the email already exists
+        $emailCheck = $this->checkEmail($data['email']);
+        if ($emailCheck['exists']) {
+            return ['status' => false, 'message' => 'Email already exists'];
+        }
+
+        // If email is unique, proceed with registration
         $query = "INSERT INTO users 
             (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
             VALUES 
@@ -49,9 +76,9 @@ class AdminHandler {
         } catch (PDOException $e) {
             return ['status' => false, 'message' => $e->getMessage()];
         }
-    }    
-    
+    }
 
+    // Function for login
     public function login($data) {
         $query = "SELECT id, firstname, lastname, email, role, password FROM users WHERE email = :email";
         try {
@@ -90,6 +117,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode($adminHandler->login($data));
     } else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
+    }
+}
+
+// Handle GET request for email check
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'checkEmail') {
+    $email = $_GET['email'] ?? '';
+    if ($email) {
+        echo json_encode($adminHandler->checkEmail($email));
+    } else {
+        echo json_encode(['status' => false, 'message' => 'Email parameter is required']);
     }
 }
 ?>
