@@ -27,6 +27,7 @@ class UserHandler {
     }
 
     public function register($data) {
+        // Ensure the keys in the data array match your database columns
         $query = "INSERT INTO users 
             (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
             VALUES 
@@ -34,18 +35,24 @@ class UserHandler {
         
         try {
             $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':firstname', $data['firstname']);
-            $stmt->bindParam(':lastname', $data['lastname']);
-            $stmt->bindParam(':date_of_birth', $data['date_of_birth']);
+            // Map frontend variables correctly
+            $stmt->bindParam(':firstname', $data['firstName']);
+            $stmt->bindParam(':lastname', $data['lastName']);
+            $stmt->bindParam(':date_of_birth', $data['dob']);
             $stmt->bindParam(':gender', $data['gender']);
-            $stmt->bindParam(':home_address', $data['home_address']);
-            $stmt->bindParam(':contact_number', $data['contact_number']);
+            $stmt->bindParam(':home_address', $data['homeAddress']);
+            $stmt->bindParam(':contact_number', $data['contactNumber']);
             $stmt->bindParam(':email', $data['email']);
-            $stmt->bindParam(':password', $hashedPassword);
-            $hashedPassword = password_hash($data['password'], PASSWORD_BCRYPT);
-            $stmt->bindParam(':role', $role); // Binding the 'user' role as a parameter
-            $role = 'user';
             
+            // Hash the password
+            $hashedPassword = password_hash($data['password'], PASSWORD_BCRYPT);
+            $stmt->bindParam(':password', $hashedPassword);
+    
+            // Set user role as 'user'
+            $role = 'user';
+            $stmt->bindParam(':role', $role);
+    
+            // Execute query
             if ($stmt->execute()) {
                 return ['status' => true, 'message' => 'User registered successfully'];
             }
@@ -53,7 +60,7 @@ class UserHandler {
         } catch (PDOException $e) {
             return ['status' => false, 'message' => $e->getMessage()];
         }
-    }
+    }    
     
 
     public function login($data) {
