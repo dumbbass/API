@@ -27,23 +27,21 @@ class AdminHandler {
     }
 
     public function register($data) {
+        // Insert query with NULL values for non-required fields, but email is now a required field
         $query = "INSERT INTO users 
             (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
             VALUES 
-            (:firstname, :lastname, :date_of_birth, :gender, :home_address, :contact_number, :email, :password, 'admin')";
-
+            (NULL, NULL, NULL, NULL, NULL, NULL, :email, :password, 'admin')";
+    
         try {
             $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':firstname', $data['firstname']);
-            $stmt->bindParam(':lastname', $data['lastname']);
-            $stmt->bindParam(':date_of_birth', $data['date_of_birth']);
-            $stmt->bindParam(':gender', $data['gender']);
-            $stmt->bindParam(':home_address', $data['home_address']);
-            $stmt->bindParam(':contact_number', $data['contact_number']);
+            
+            // Bind email and password
             $stmt->bindParam(':email', $data['email']);
             $stmt->bindParam(':password', $hashedPassword);
             $hashedPassword = password_hash($data['password'], PASSWORD_BCRYPT);
             
+            // Execute the query
             if ($stmt->execute()) {
                 return ['status' => true, 'message' => 'Admin registered successfully'];
             }
@@ -51,7 +49,8 @@ class AdminHandler {
         } catch (PDOException $e) {
             return ['status' => false, 'message' => $e->getMessage()];
         }
-    }
+    }    
+    
 
     public function login($data) {
         $query = "SELECT id, firstname, lastname, email, role, password FROM users WHERE email = :email";
@@ -60,22 +59,26 @@ class AdminHandler {
             $stmt->bindParam(':email', $data['email']);
             $stmt->execute();
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    
+            // Check if user exists and password is correct
             if ($user && password_verify($data['password'], $user['password'])) {
+                // Only allow login if the user is an admin
                 if ($user['role'] === 'admin') {
                     return [
                         'status' => true,
                         'dashboard' => 'Admin Dashboard',
                         'user' => $user
                     ];
+                } else {
+                    // Deny login for non-admin users (e.g., users with role 'user')
+                    return ['status' => false, 'message' => 'Access denied for non-admin users'];
                 }
-                return ['status' => false, 'message' => 'Access denied for non-admin'];
             }
             return ['status' => false, 'message' => 'Invalid email or password'];
         } catch (PDOException $e) {
             return ['status' => false, 'message' => $e->getMessage()];
         }
-    }
+    }    
 }
 
 // Route admin actions
