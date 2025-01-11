@@ -57,42 +57,48 @@ class UserHandler {
     
 
     public function login($data) {
-        $query = "SELECT id, firstname, lastname, date_of_birth, gender, home_address, contact_number, email, role, password 
-                  FROM users WHERE email = :email";
-    
+        $query = "SELECT id, firstname, lastname, email, role, password FROM users WHERE email = :email";
+
         try {
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':email', $data['email']);
             $stmt->execute();
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-            // Validate the password and role
+
             if ($user && password_verify($data['password'], $user['password'])) {
-                if ($user['role'] === 'user') {
-                    return [
-                        'status' => true,
-                        'message' => 'Login successful',
-                        'dashboard' => 'User Dashboard',
-                        'user' => $user
-                    ];
-                } elseif ($user['role'] === 'admin') {
-                    return [
-                        'status' => true,
-                        'message' => 'Login successful',
-                        'dashboard' => 'Admin Dashboard',
-                        'user' => $user
-                    ];
+                // Generate a token (optional)
+                $token = bin2hex(random_bytes(16));
+
+                // Check user role and set the correct dashboard
+                if ($user['role'] === 'admin') {
+                    $dashboard = 'Admin Dashboard';
+                } elseif ($user['role'] === 'user') {
+                    $dashboard = 'User Dashboard';
                 } else {
-                    return ['status' => false, 'message' => 'Unauthorized role'];
+                    // Deny login if role is unknown
+                    return ['status' => false, 'message' => 'Access denied for this role'];
                 }
+
+                return [
+                    'status' => true,
+                    'message' => 'Login successful',
+                    'dashboard' => $dashboard,
+                    'token' => $token,
+                    'user' => [
+                        'id' => $user['id'],
+                        'firstname' => $user['firstname'],
+                        'lastname' => $user['lastname'],
+                        'email' => $user['email'],
+                        'role' => $user['role']
+                    ]
+                ];
             }
-    
+
             return ['status' => false, 'message' => 'Invalid email or password'];
         } catch (PDOException $e) {
             return ['status' => false, 'message' => $e->getMessage()];
         }
     }
-    
 }
 
 // Route user actions
