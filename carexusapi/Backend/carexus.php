@@ -16,24 +16,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     exit(0);  // Exit after responding to OPTIONS request
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($action === 'register') {
-        echo json_encode($userHandler->register($data));
-    } elseif ($action === 'login') {
-        echo json_encode($userHandler->login($data));
-    } elseif ($action === 'getUserProfile') {
-        // Assuming userId is passed through GET request
-        $userId = $_GET['id'] ?? null; 
-        if ($userId) {
-            echo json_encode($userHandler->getUserProfile($userId));
-        } else {
-            echo json_encode(['status' => false, 'message' => 'User ID is required']);
-        }
-    } else {
-        echo json_encode(['status' => false, 'message' => 'Invalid action']);
-    }
-}
-
 $routes = new Routes();
 $data = json_decode(file_get_contents("php://input"), true);
 $action = $_GET['action'] ?? '';
