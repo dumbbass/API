@@ -25,6 +25,35 @@ class UserHandler {
         $database = new Database();
         $this->conn = $database->getConnection();
     }
+    
+    public function getUserProfile($userId) {
+        $query = "SELECT firstname, lastname, date_of_birth, gender, home_address, contact_number, email FROM users WHERE id = :id";
+    
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':id', $userId);
+            $stmt->execute();
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+            if ($user) {
+                return [
+                    'status' => true,
+                    'user' => $user
+                ];
+            }
+    
+            return [
+                'status' => false,
+                'message' => 'User not found'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+    
 
     public function register($data) {
         // Ensure the keys in the data array match your database columns
