@@ -143,30 +143,196 @@ class UserHandler {
             return ['status' => false, 'message' => $e->getMessage()];
         }
     }
+
+    //scheduling lineeeee.........
+
+    public function getDoctorsWithAdminRole() {
+        $query = "SELECT id, firstname, lastname, email FROM users WHERE role = 'admin'";
+    
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute();
+    
+            $doctors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            if ($doctors) {
+                // Handle null values
+                foreach ($doctors as &$doctor) {
+                    $doctor['firstname'] = $doctor['firstname'] ?? 'Unknown';
+                    $doctor['lastname'] = $doctor['lastname'] ?? 'Unknown';
+                }
+    
+                return [
+                    'status' => true,
+                    'doctors' => $doctors
+                ];
+            } else {
+                return [
+                    'status' => false,
+                    'message' => 'No doctors found with the admin role'
+                ];
+            }
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }    
+    
+
+     // Function to schedule an appointment
+    public function scheduleAppointment($data) {
+        session_start();  // Start session to access user data
+        $patientId = $_SESSION['user_id'];  // Get the current logged-in patient's ID
+        $doctorId = $data['doctor_id'];
+        $appointmentDate = $data['appointment_date'];
+        $purpose = $data['purpose'];
+
+        // Database connection
+        $db = new Database();
+        $conn = $db->getConnection();
+
+        // SQL query to insert the appointment
+        $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
+                  VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
+
+        // Prepare and bind the statement
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam("iiss", $patientId, $doctorId, $appointmentDate, $purpose);
+
+        // Execute the query
+        if ($stmt->execute()) {
+            return ['status' => true, 'message' => 'Appointment scheduled successfully'];
+        } else {
+            return ['status' => false, 'message' => 'Failed to schedule appointment'];
+        }
+    }
+
+    public function setAppointmentTime($appointmentId, $time) {
+        $db = new Database();
+        $conn = $db->getConnection();
+    
+        $query = "UPDATE appointments SET appointment_time = ?, status = 'accepted', updated_at = NOW() WHERE appointment_id = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam("si", $time, $appointmentId);
+    
+        if ($stmt->execute()) {
+            return ['status' => true, 'message' => 'Appointment time set successfully'];
+        } else {
+            return ['status' => false, 'message' => 'Failed to set appointment time'];
+        }
+    }
+    
+
+    public function updateAppointmentStatus($data) {
+        $appointment_id = $data['appointment_id'];
+        $status = $data['status']; // 'Approved' or 'Rescheduled'
+        $appointment_time = isset($data['appointment_time']) ? $data['appointment_time'] : null;
+    
+        if (empty($appointment_id) || empty($status)) {
+            return [
+                'status' => false,
+                'message' => 'Appointment ID and status are required.'
+            ];
+        }
+    
+        // Prepare the query to update the appointment
+        if ($status === 'Approved') {
+            $query = "UPDATE appointments SET status = ?, appointment_time = ? WHERE id = ?";
+            $stmt = $this->conn->prepare($query);
+            // Bind params: string for status, string for appointment_time, integer for appointment_id
+            $stmt->bindParam('ssi', $status, $appointment_time, $appointment_id);
+        } else if ($status === 'Rescheduled') {
+            $query = "UPDATE appointments SET status = ?, appointment_time = NULL WHERE id = ?";
+            $stmt = $this->conn->prepare($query);
+            // Bind params: string for status, integer for appointment_id
+            $stmt->bindParam('si', $status, $appointment_id);
+        }
+    
+        try {
+            if ($stmt->execute()) {
+                return [
+                    'status' => true,
+                    'message' => 'Appointment updated successfully.'
+                ];
+            } else {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to update appointment.'
+                ];
+            }
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }    
+    
 }
 
 // Route user actions
 $userHandler = new UserHandler();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
         echo json_encode($userHandler->register($data));
     } elseif ($action === 'login') {
         echo json_encode($userHandler->login($data));
-    } else {
-        echo json_encode(['status' => false, 'message' => 'Invalid action']);
-    }
-}
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    if ($action === 'getUserProfile') {
-        $userId = $_GET['id'] ?? null;
-        if ($userId) {
-            $response = $userHandler->getUserProfile($userId);
+    } elseif ($action === 'scheduleAppointment') {
+        session_start();  // Start session to get logged-in user
+
+        // Automatically get the patient ID from the session
+        $patientId = $_SESSION['user_id'] ?? null;
+        $doctorId = $_POST['doctor_id'] ?? null;
+        $appointmentDate = $_POST['appointment_date'] ?? null;
+        $purpose = $_POST['purpose'] ?? null;
+
+        // Check if all required fields are provided
+        if ($patientId && $doctorId && $appointmentDate && $purpose) {
+            $response = $userHandler->scheduleAppointment([
+                'patient_id' => $patientId,
+                'doctor_id' => $doctorId,
+                'date' => $appointmentDate,
+                'purpose' => $purpose
+            ]);
             echo json_encode($response);
         } else {
-            echo json_encode(['status' => false, 'message' => 'User ID is required']);
+            echo json_encode(['status' => false, 'message' => 'All fields are required']);
         }
     } else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
 }
+
+// Only one block to handle GET requests
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (isset($_GET['action'])) {
+        $action = $_GET['action']; // Get the action parameter from the query string
+        
+        // Debug log: print the action value
+        error_log("Received action: $action"); // This will log to the PHP error log
+        
+        // Check for each action and handle accordingly
+        if ($action === 'getDoctorsWithAdminRole') {
+            $response = $userHandler->getDoctorsWithAdminRole();
+            echo json_encode($response);
+        } elseif ($action === 'getUserProfile') {
+            $userId = $_GET['id'] ?? null;
+            if ($userId) {
+                $response = $userHandler->getUserProfile($userId);
+                echo json_encode($response);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'User ID is required']);
+            }
+        } else {
+            echo json_encode(['status' => false, 'message' => 'Invalid action']);
+        }
+    } else {
+        echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+    }
+}
+
+
 ?>
