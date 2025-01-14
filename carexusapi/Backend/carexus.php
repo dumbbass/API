@@ -182,48 +182,47 @@ class UserHandler {
     
 
      // Function to schedule an appointment
-    public function scheduleAppointment($data) {
+     public function scheduleAppointment($data) {
         session_start();  // Start session to access user data
-        $patientId = $_SESSION['user_id'];  // Get the current logged-in patient's ID
+        $patientId = $_SESSION['user_id'];  // Current logged-in patient's ID
         $doctorId = $data['doctor_id'];
         $appointmentDate = $data['appointment_date'];
         $purpose = $data['purpose'];
-
+    
         // Database connection
         $db = new Database();
         $conn = $db->getConnection();
-
+    
         // SQL query to insert the appointment
         $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
                   VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
-
+    
         // Prepare and bind the statement
         $stmt = $conn->prepare($query);
-        $stmt->bindParam("iiss", $patientId, $doctorId, $appointmentDate, $purpose);
-
+        $stmt->bindParam("iiss", $patientId, $doctorId, $appointmentDate, $purpose);  
+    
         // Execute the query
         if ($stmt->execute()) {
             return ['status' => true, 'message' => 'Appointment scheduled successfully'];
         } else {
-            return ['status' => false, 'message' => 'Failed to schedule appointment'];
+            return ['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]];
         }
     }
-
+    
     public function setAppointmentTime($appointmentId, $time) {
         $db = new Database();
         $conn = $db->getConnection();
     
         $query = "UPDATE appointments SET appointment_time = ?, status = 'accepted', updated_at = NOW() WHERE appointment_id = ?";
         $stmt = $conn->prepare($query);
-        $stmt->bindParam("si", $time, $appointmentId);
+        $stmt->bindParam("si", $time, $appointmentId);  
     
         if ($stmt->execute()) {
             return ['status' => true, 'message' => 'Appointment time set successfully'];
         } else {
-            return ['status' => false, 'message' => 'Failed to set appointment time'];
+            return ['status' => false, 'message' => 'Failed to set appointment time: ' . $stmt->errorInfo()[2]];
         }
-    }
-    
+    }    
 
     public function updateAppointmentStatus($data) {
         $appointment_id = $data['appointment_id'];
@@ -289,12 +288,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $appointmentDate = $_POST['appointment_date'] ?? null;
         $purpose = $_POST['purpose'] ?? null;
 
-        // Check if all required fields are provided
+        // Check if the patient is logged in and all required fields are provided
         if ($patientId && $doctorId && $appointmentDate && $purpose) {
+            // Prepare the data to be passed to the handler
             $response = $userHandler->scheduleAppointment([
-                'patient_id' => $patientId,
                 'doctor_id' => $doctorId,
-                'date' => $appointmentDate,
+                'appointment_date' => $appointmentDate,
                 'purpose' => $purpose
             ]);
             echo json_encode($response);
