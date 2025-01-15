@@ -275,42 +275,6 @@ class UserHandler {
         }
     } 
     
-    // This is your public function to fetch appointments for the patient
-    public function getAllAppointments() {
-        global $conn;  // Assuming $conn is your MySQL connection object
-    
-        // SQL query to fetch all appointments
-        $query = "SELECT appointment_id, patient_id, doctor_id, appointment_date, appointment_time, purpose, status
-                  FROM appointments";
-    
-        // Prepare the SQL query
-        if ($stmt = $conn->prepare($query)) {
-            // Execute the statement
-            $stmt->execute();
-    
-            // Fetch all results
-            $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-            // Check if any appointments were found
-            if ($appointments) {
-                return [
-                    'status' => true,
-                    'appointments' => $appointments
-                ];
-            } else {
-                return [
-                    'status' => false,
-                    'message' => 'No appointments found'
-                ];
-            }
-        } else {
-            return [
-                'status' => false,
-                'message' => 'Error preparing the query.'
-            ];
-        }
-    }    
-
 
 // Function to schedule an appointment
 public function scheduleAppointment($data) {
@@ -619,14 +583,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['action'])) {
         $action = $_GET['action']; // Get the action parameter from the query string
-        
+
         // Debug log: print the action value
         error_log("Received action: $action"); // This will log to the PHP error log
-        
+
         // Check for each action and handle accordingly
         if ($action === 'getDoctors') {
             $response = $userHandler->getDoctors();
             echo json_encode($response);
+
         } elseif ($action === 'getUserProfile') {
             $userId = $_GET['id'] ?? null;
             if ($userId) {
@@ -635,18 +600,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } else {
                 echo json_encode(['status' => false, 'message' => 'User ID is required']);
             }
+
         } elseif ($action === 'getPatients') {  // New condition for getting patients
             $response = $userHandler->getPatients(); // Call the new function to get patients
             echo json_encode($response);  // Return the response as JSON
-        } elseif ($action === 'getAllAppointments') {  // Modify to handle getAllAppointments
-            $response = $appointmentHandler->getAllAppointments(); // Call the function to get all appointments
-            echo json_encode($response);  // Return the response as JSON
-        } else {
-            echo json_encode(['status' => false, 'message' => 'Invalid action']);
-        }
+
     } else {
         echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
     }
 }
+}
+
 
 ?>
