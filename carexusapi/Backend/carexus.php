@@ -400,6 +400,25 @@ public function scheduleAppointment($data) {
         }
     }    
     
+    public function getUsers() {
+        $query = "SELECT id, firstname, lastname, gender, email FROM users";
+        
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute();
+            $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return [
+                'status' => true,
+                'users' => $users
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 
 // Route user actions
@@ -582,16 +601,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['action'])) {
-        $action = $_GET['action']; // Get the action parameter from the query string
+        $action = $_GET['action'];
 
-        // Debug log: print the action value
-        error_log("Received action: $action"); // This will log to the PHP error log
-
-        // Check for each action and handle accordingly
         if ($action === 'getDoctors') {
             $response = $userHandler->getDoctors();
             echo json_encode($response);
-
         } elseif ($action === 'getUserProfile') {
             $userId = $_GET['id'] ?? null;
             if ($userId) {
@@ -600,16 +614,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } else {
                 echo json_encode(['status' => false, 'message' => 'User ID is required']);
             }
-
         } elseif ($action === 'getPatients') {  // New condition for getting patients
             $response = $userHandler->getPatients(); // Call the new function to get patients
             echo json_encode($response);  // Return the response as JSON
-
-    } else {
-        echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+        } elseif ($action === 'getUsers') {
+            $response = $userHandler->getUsers();
+            echo json_encode($response);
+        } else {
+            echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+        }
     }
 }
-}
-
-
-?>
