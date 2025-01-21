@@ -412,6 +412,42 @@ public function scheduleAppointment($data) {
             ];
         }
     }
+
+    public function getAppointments($patientId) {
+        $query = "
+            SELECT 
+                a.appointment_id, 
+                a.appointment_date, 
+                a.appointment_time, 
+                a.purpose, 
+                a.status, 
+                d.firstname AS doctor_firstname, 
+                d.lastname AS doctor_lastname
+            FROM 
+                appointments a
+            JOIN 
+                doctors d ON a.doctor_id = d.doctor_id
+            WHERE 
+                a.patient_id = :patientId
+        ";
+
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':patientId', $patientId, PDO::PARAM_INT);
+            $stmt->execute();
+            $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return [
+                'status' => true,
+                'appointments' => $appointments
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 
 // Route user actions
@@ -563,6 +599,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         } elseif ($action === 'getUsers') {
             $response = $userHandler->getUsers();
             echo json_encode($response);
+        } elseif ($action === 'getAppointments') {
+            $patientId = $_GET['patient_id'] ?? null;
+            if ($patientId) {
+                $response = $userHandler->getAppointments($patientId);
+                echo json_encode($response);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'Patient ID is required']);
+            }
         } else {
             echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
         }
