@@ -75,10 +75,20 @@ class UserHandler {
         $role = 'user';
 
         try {
+            // Insert into users table
             $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $this->conn->prepare($query);
             $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
+
+            // Get the last inserted user ID
+            $userId = $this->conn->lastInsertId();
+
+            // Insert into patients table
+            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $email]);
 
             echo json_encode(['status' => true, 'message' => 'User registered successfully']);
         } catch (Exception $e) {
