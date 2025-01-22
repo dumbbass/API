@@ -99,4 +99,33 @@ class Get extends GlobalMethods{
             return $this->sendPayload(null, "failed", "No appointments found for this patient.", 404);
         }
     }
+
+        // Fetch appointments for a specific doctor with patient names
+        public function getDoctorsPatients($doctorId) {
+            // SQL query to fetch appointments along with patient details (names)
+            $sql = "
+            SELECT a.appointment_id, a.patient_id, a.doctor_id, a.appointment_date, a.appointment_time, a.purpose, a.status,
+                p.firstname AS patient_firstname, p.lastname AS patient_lastname, p.gender AS gender
+            FROM appointments a
+            LEFT JOIN patients p ON a.patient_id = p.patient_id
+            WHERE a.doctor_id = :doctor_id
+            ";
+    
+            // Prepare and execute the query
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindParam(':doctor_id', $doctorId, PDO::PARAM_INT);
+            $stmt->execute();
+    
+            // Fetch the results
+            $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            // Check if appointments are found
+            if ($appointments) {
+                // Return appointments with patient details
+                return $this->sendPayload($appointments, "success", "Successfully retrieved appointments with patient information.", 200);
+            } else {
+                // Return failure response if no appointments are found
+                return $this->sendPayload(null, "failed", "No appointments found for this doctor.", 404);
+            }
+        }
 }

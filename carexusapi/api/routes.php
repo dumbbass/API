@@ -94,6 +94,22 @@
                 case 'getDoctors':
                     echo json_encode($get->get_records('doctors'));
                 break;
+
+                case 'getDoctorInfo':
+                    if (isset($_GET['id'])) {
+                        echo json_encode($get->get_records('doctors', 'id = '.$_GET['id']));
+                    } else {
+                        echo json_encode(array("code" => 400, "message" => "Missing doctors ID"));
+                    }
+                break;
+
+                case 'getDoctorsPatients':
+                    if (isset($_GET['doctor_id'])) {
+                        echo json_encode($get->getDoctorsPatients($_GET['doctor_id']));
+                    } else {
+                        echo json_encode(array("code" => 400, "message" => "Missing doctor ID"));
+                    }
+                break;
                     
                 default:
                     // Return a 403 response for unsupported requests
