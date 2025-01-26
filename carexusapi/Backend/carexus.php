@@ -394,7 +394,7 @@ public function scheduleAppointment($data) {
     }    
     
     public function getUsers() {
-        $query = "SELECT id, firstname, lastname, gender, email FROM users";
+        $query = "SELECT id, firstname, lastname, gender, email,  contact_number, home_address FROM users";
         
         try {
             $stmt = $this->conn->prepare($query);
@@ -612,3 +612,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
     }
 }
+
