@@ -46,37 +46,54 @@ class AdminHandler {
         }
     }
 
-    // Function for registration
     public function register($data) {
-        // Check if the email already exists
-        $emailCheck = $this->checkEmail($data['email']);
-        if ($emailCheck['exists']) {
-            return ['status' => false, 'message' => 'Email already exists'];
-        }
-
-        // If email is unique, proceed with registration
-        $query = "INSERT INTO users 
-            (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
-            VALUES 
-            (NULL, NULL, NULL, NULL, NULL, NULL, :email, :password, 'admin')";
+        $firstName = $data['firstName'];
+        $lastName = $data['lastName'];
+        $dob = $data['dob'];
+        $gender = $data['gender'];
+        $homeAddress = $data['homeAddress'];
+        $contactNumber = $data['contactNumber'];
+        $email = $data['email'];
+        $password = password_hash($data['password'], PASSWORD_DEFAULT);
+        
+        // Set role as 'admin' for admin users
+        $role = 'admin';
     
         try {
-            $stmt = $this->conn->prepare($query);
-            
-            // Bind email and password
-            $stmt->bindParam(':email', $data['email']);
-            $stmt->bindParam(':password', $hashedPassword);
-            $hashedPassword = password_hash($data['password'], PASSWORD_BCRYPT);
-            
-            // Execute the query
-            if ($stmt->execute()) {
-                return ['status' => true, 'message' => 'Admin registered successfully'];
+            // Validate required fields
+            if (empty($firstName) || empty($lastName) || empty($dob) || empty($gender) || empty($homeAddress) || empty($contactNumber) || empty($email) || empty($password)) {
+                return ['status' => false, 'message' => 'All fields are required'];
             }
-            return ['status' => false, 'message' => 'Failed to register admin'];
-        } catch (PDOException $e) {
-            return ['status' => false, 'message' => $e->getMessage()];
+    
+            // Check if email already exists
+            $emailCheck = $this->checkEmail($email);
+            if ($emailCheck['exists']) {
+                return ['status' => false, 'message' => 'Email already exists'];
+            }
+    
+            // Insert into users table
+            $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
+    
+            // Get the last inserted user ID (for reference in the doctors table)
+            $userId = $this->conn->lastInsertId();
+    
+            // Insert into doctors table
+            $query = "INSERT INTO doctors (id, firstname, lastname, gender, email, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $email]);
+    
+            // Return success message
+            return ['status' => true, 'message' => 'Admin registered and added to doctors successfully'];
+        } catch (Exception $e) {
+            // Log the error and return failure message
+            error_log('Registration error: ' . $e->getMessage());
+            return ['status' => false, 'message' => 'Failed to register admin and add to doctors: ' . $e->getMessage()];
         }
-    }
+    }    
 
     // Function for login
     public function login($data) {
@@ -110,14 +127,23 @@ class AdminHandler {
 
 // Route admin actions
 $adminHandler = new AdminHandler();
+$data = json_decode(file_get_contents("php://input"), true); // Get the data from the POST request
+$action = $_GET['action'] ?? ''; // Get the action from the query string (e.g., action=register)
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
-        echo json_encode($adminHandler->register($data));
+        // Directly call the register method without needing a loggedInUserId
+        echo json_encode($adminHandler->register($data)); 
     } elseif ($action === 'login') {
+        // If the action is 'login', call the login function
         echo json_encode($adminHandler->login($data));
     } else {
+        // Handle invalid actions
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
+} else {
+    // Handle unsupported request methods
+    echo json_encode(['status' => false, 'message' => 'Invalid request method']);
 }
 
 // Handle GET request for email check
