@@ -467,6 +467,9 @@ public function scheduleAppointment($data) {
         $email = $data['email'];
         $homeAddress = $data['home_address'];
         $contactNumber = $data['contact_number'];
+        $height = isset($data['height']) ? $data['height'] : 0; // Default to 0 if not provided
+        $weight = isset($data['weight']) ? $data['weight'] : 0; // Default to 0 if not provided
+        $medications = isset($data['medications']) ? $data['medications'] : '';
 
         if (!is_numeric($userId) || $userId <= 0) {
             return [
@@ -475,7 +478,7 @@ public function scheduleAppointment($data) {
             ];
         }
 
-        $query = "UPDATE users SET firstname = :firstname, lastname = :lastname, email = :email, home_address = :homeAddress, contact_number = :contactNumber WHERE id = :id";
+        $query = "UPDATE users SET firstname = :firstname, lastname = :lastname, email = :email, home_address = :homeAddress, contact_number = :contactNumber, height = :height, weight = :weight, medications = :medications WHERE id = :id";
         try {
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $userId);
@@ -484,6 +487,10 @@ public function scheduleAppointment($data) {
             $stmt->bindParam(':email', $email);
             $stmt->bindParam(':homeAddress', $homeAddress);
             $stmt->bindParam(':contactNumber', $contactNumber);
+            $stmt->bindParam(':height', $height);
+            $stmt->bindParam(':weight', $weight);
+            $stmt->bindParam(':medications', $medications);
+            
             $stmt->execute();
 
             return [
