@@ -61,7 +61,6 @@ class UserHandler {
             ];
         }
     }
-    
 
     public function register($data) {
         $firstName = $data['firstName'];
@@ -72,24 +71,36 @@ class UserHandler {
         $contactNumber = $data['contactNumber'];
         $email = $data['email'];
         $password = password_hash($data['password'], PASSWORD_DEFAULT);
+    
+        // Check if height and weight are set, otherwise use 0
+        $height = isset($data['height']) ? $data['height'] : 0;
+        $weight = isset($data['weight']) ? $data['weight'] : 0;
+        
+        $medications = $data['medications'];
         $role = 'user';
-
+    
         try {
+            // Validate required fields (height and weight will be valid even if they are 0)
+            if (empty($firstName) || empty($lastName) || empty($dob) || empty($gender) || empty($homeAddress) || empty($contactNumber) || empty($email) || empty($password) || empty($medications)) {
+                echo json_encode(['status' => false, 'message' => 'All fields are required']);
+                return;
+            }
+    
             // Insert into users table
             $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $this->conn->prepare($query);
             $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
-
+    
             // Get the last inserted user ID
             $userId = $this->conn->lastInsertId();
-
-            // Insert into patients table
-            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, created_at, updated_at) 
-                      VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+    
+            // Insert into patients table with new fields
+            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, height, weight, medications, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
             $stmt = $this->conn->prepare($query);
-            $stmt->execute([$userId, $firstName, $lastName, $gender, $email]);
-
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $email, $height, $weight, $medications]);
+    
             echo json_encode(['status' => true, 'message' => 'User registered successfully']);
         } catch (Exception $e) {
             error_log('Registration error: ' . $e->getMessage());
@@ -97,9 +108,8 @@ class UserHandler {
         }
     }    
     
-
     public function login($data) {
-        $query = "SELECT id, firstname, lastname, email, role, password FROM users WHERE email = :email";
+        $query = "SELECT id, firstname, lastname, email, role, password, height, weight, medications FROM users WHERE email = :email";
 
         try {
             $stmt = $this->conn->prepare($query);
@@ -141,6 +151,7 @@ class UserHandler {
             return ['status' => false, 'message' => $e->getMessage()];
         }
     }
+
 
     public function assignRoleToUser($userId, $firstName, $lastName, $gender, $email, $role) {
         // Database connection
@@ -496,6 +507,35 @@ $action = $_GET['action'] ?? null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
+        // Decode incoming JSON data
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // Validate required fields
+        $requiredFields = [
+            'firstName', 'lastName', 'dob', 'gender', 
+            'homeAddress', 'contactNumber', 'email', 
+            'password', 'medications'
+        ];
+
+        // Check for non-numeric fields (string fields)
+        foreach ($requiredFields as $field) {
+            if (empty($data[$field]) && !isset($data[$field])) {
+                echo json_encode(['status' => false, 'message' => "$field is required"]);
+                return;
+            }
+        }
+
+        // Special validation for numeric fields (height and weight)
+        if (!isset($data['height'])) {
+            echo json_encode(['status' => false, 'message' => "height is required"]);
+            return;
+        }
+        if (!isset($data['weight'])) {
+            echo json_encode(['status' => false, 'message' => "weight is required"]);
+            return;
+        }
+
+        // Call the register method with the full data
         $userHandler->register($data);
     } elseif ($action === 'login') {
         // Login functionality remains the same...
