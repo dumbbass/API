@@ -448,6 +448,44 @@ public function scheduleAppointment($data) {
             ];
         }
     }
+
+    public function updateUserProfile($data) {
+        $userId = $data['id'];
+        $firstname = $data['firstname'];
+        $lastname = $data['lastname'];
+        $email = $data['email'];
+        $homeAddress = $data['home_address'];
+        $contactNumber = $data['contact_number'];
+
+        if (!is_numeric($userId) || $userId <= 0) {
+            return [
+                'status' => false,
+                'message' => 'Invalid user ID'
+            ];
+        }
+
+        $query = "UPDATE users SET firstname = :firstname, lastname = :lastname, email = :email, home_address = :homeAddress, contact_number = :contactNumber WHERE id = :id";
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':id', $userId);
+            $stmt->bindParam(':firstname', $firstname);
+            $stmt->bindParam(':lastname', $lastname);
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':homeAddress', $homeAddress);
+            $stmt->bindParam(':contactNumber', $contactNumber);
+            $stmt->execute();
+
+            return [
+                'status' => true,
+                'message' => 'User profile updated successfully'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 
 // Route user actions
@@ -570,6 +608,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             echo json_encode(['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]]);
         }
+    } elseif ($action === 'updateUserProfile') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $response = $userHandler->updateUserProfile($data);
+        echo json_encode($response);
     } else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
