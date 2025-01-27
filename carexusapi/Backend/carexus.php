@@ -64,43 +64,36 @@ class UserHandler {
     
 
     public function register($data) {
-        // Ensure the keys in the data array match your database columns
-        $query = "INSERT INTO users 
-            (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
-            VALUES 
-            (:firstname, :lastname, :date_of_birth, :gender, :home_address, :contact_number, :email, :password, :role)";
-        
+        $firstName = $data['firstName'];
+        $lastName = $data['lastName'];
+        $dob = $data['dob'];
+        $gender = $data['gender'];
+        $homeAddress = $data['homeAddress'];
+        $contactNumber = $data['contactNumber'];
+        $email = $data['email'];
+        $password = password_hash($data['password'], PASSWORD_DEFAULT);
+        $role = 'user';
+
         try {
+            // Insert into users table
+            $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $this->conn->prepare($query);
-            // Map frontend variables correctly
-            $stmt->bindParam(':firstname', $data['firstName']);
-            $stmt->bindParam(':lastname', $data['lastName']);
-            $stmt->bindParam(':date_of_birth', $data['dob']);
-            $stmt->bindParam(':gender', $data['gender']);
-            $stmt->bindParam(':home_address', $data['homeAddress']);
-            $stmt->bindParam(':contact_number', $data['contactNumber']);
-            $stmt->bindParam(':email', $data['email']);
-            
-            // Hash the password
-            $hashedPassword = password_hash($data['password'], PASSWORD_BCRYPT);
-            $stmt->bindParam(':password', $hashedPassword);
-        
-            // Determine role
-            $role = 'user';  // Default role
-            if ($data['role'] === 'admin') {
-                $role = 'admin';
-            }
-            $stmt->bindParam(':role', $role);
-        
-            // Execute query
-            if ($stmt->execute()) {
-                // After successful registration, assign role to user (e.g., if it's an admin, insert into doctor table)
-                $userId = $this->conn->lastInsertId();
-                return $this->assignRoleToUser($userId, $data['firstName'], $data['lastName'], $data['gender'], $data['email'], $role);
-            }
-            return ['status' => false, 'message' => 'Failed to register user'];
-        } catch (PDOException $e) {
-            return ['status' => false, 'message' => $e->getMessage()];
+            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
+
+            // Get the last inserted user ID
+            $userId = $this->conn->lastInsertId();
+
+            // Insert into patients table
+            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $email]);
+
+            echo json_encode(['status' => true, 'message' => 'User registered successfully']);
+        } catch (Exception $e) {
+            error_log('Registration error: ' . $e->getMessage());
+            echo json_encode(['status' => false, 'message' => 'Failed to register user: ' . $e->getMessage()]);
         }
     }    
     
@@ -400,6 +393,99 @@ public function scheduleAppointment($data) {
         }
     }    
     
+    public function getUsers() {
+        $query = "SELECT id, firstname, lastname, gender, email,  contact_number, home_address FROM users";
+        
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->execute();
+            $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return [
+                'status' => true,
+                'users' => $users
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    public function getAppointments($patientId) {
+        $query = "
+            SELECT 
+                a.appointment_id, 
+                a.appointment_date, 
+                a.appointment_time, 
+                a.purpose, 
+                a.status, 
+                d.firstname AS doctor_firstname, 
+                d.lastname AS doctor_lastname
+            FROM 
+                appointments a
+            JOIN 
+                doctors d ON a.doctor_id = d.doctor_id
+            WHERE 
+                a.patient_id = :patientId
+        ";
+
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':patientId', $patientId, PDO::PARAM_INT);
+            $stmt->execute();
+            $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return [
+                'status' => true,
+                'appointments' => $appointments
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    public function updateUserProfile($data) {
+        $userId = $data['id'];
+        $firstname = $data['firstname'];
+        $lastname = $data['lastname'];
+        $email = $data['email'];
+        $homeAddress = $data['home_address'];
+        $contactNumber = $data['contact_number'];
+
+        if (!is_numeric($userId) || $userId <= 0) {
+            return [
+                'status' => false,
+                'message' => 'Invalid user ID'
+            ];
+        }
+
+        $query = "UPDATE users SET firstname = :firstname, lastname = :lastname, email = :email, home_address = :homeAddress, contact_number = :contactNumber WHERE id = :id";
+        try {
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':id', $userId);
+            $stmt->bindParam(':firstname', $firstname);
+            $stmt->bindParam(':lastname', $lastname);
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':homeAddress', $homeAddress);
+            $stmt->bindParam(':contactNumber', $contactNumber);
+            $stmt->execute();
+
+            return [
+                'status' => true,
+                'message' => 'User profile updated successfully'
+            ];
+        } catch (PDOException $e) {
+            return [
+                'status' => false,
+                'message' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 
 // Route user actions
@@ -410,55 +496,7 @@ $action = $_GET['action'] ?? null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'register') {
-        // Get incoming POST data
-        $data = json_decode(file_get_contents('php://input'), true);
-
-        // Extract user registration details
-        $firstName = $data['firstName'];
-        $lastName = $data['lastName'];
-        $dob = $data['dob'];
-        $gender = $data['gender'];
-        $homeAddress = $data['homeAddress'];
-        $contactNumber = $data['contactNumber'];
-        $email = $data['email'];
-        $password = password_hash($data['password'], PASSWORD_DEFAULT);  // Secure password storage
-        
-        // Set the role to 'user' by default
-        $role = 'user';
-
-        // Database connection
-        $db = new Database();
-        $conn = $db->getConnection();
-
-        // Start a transaction to ensure both operations are atomic
-        $conn->beginTransaction();
-
-        try {
-            // Step 1: Insert user into the 'users' table with role set to 'user'
-            $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            $stmt = $conn->prepare($query);
-            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
-
-            // Get the last inserted user ID (which will be used as the user_id in the patients table)
-            $userId = $conn->lastInsertId();
-
-            // Step 2: Insert into the 'patients' table as this is a user (not an admin)
-            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, created_at, updated_at) 
-                      VALUES (?, ?, ?, ?, ?, NOW(), NOW())";
-            $stmt = $conn->prepare($query);
-            $stmt->execute([$userId, $firstName, $lastName, $gender, $email]);
-
-            // Commit the transaction after both inserts
-            $conn->commit();
-
-            // Return success message
-            echo json_encode(['status' => true, 'message' => 'User registered successfully']);
-        } catch (Exception $e) {
-            // Rollback transaction in case of error
-            $conn->rollBack();
-            echo json_encode(['status' => false, 'message' => 'Failed to register user: ' . $e->getMessage()]);
-        }
+        $userHandler->register($data);
     } elseif ($action === 'login') {
         // Login functionality remains the same...
         $data = json_decode(file_get_contents('php://input'), true);
@@ -507,71 +545,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             echo json_encode(['status' => false, 'message' => 'Email and password are required']);
         }
-
-        } elseif ($action === 'scheduleAppointment') {
-            $data = json_decode(file_get_contents('php://input'), true);
-        
-            $patientId = $data['patient_id'];
-            $doctorId = $data['doctor_id'];
-            $appointmentDate = $data['appointment_date'];
-            $purpose = $data['purpose'];
-        
-            $db = new Database();
-            $conn = $db->getConnection();
-        
-            // ✅ Validate if the doctor exists
-            $query = "SELECT doctor_id FROM doctors WHERE doctor_id = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
-            $stmt->execute();
-            $doctorExists = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-            if (!$doctorExists) {
-                echo json_encode(['status' => false, 'message' => 'Invalid doctor ID. Doctor not found.']);
-                return;
-            }
-        
-            // ✅ Validate if the patient exists
-            $query = "SELECT patient_id FROM patients WHERE patient_id = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
-            $stmt->execute();
-            $patientExists = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-            if (!$patientExists) {
-                echo json_encode(['status' => false, 'message' => 'Invalid patient ID. Patient not found.']);
-                return;
-            }
-        
-            // ✅ Check if the doctor is available on the selected date
-            $query = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'cancelled'";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
-            $stmt->bindParam(2, $appointmentDate, PDO::PARAM_STR);
-            $stmt->execute();
-            $existingAppointment = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-            if ($existingAppointment) {
-                echo json_encode(['status' => false, 'message' => 'Doctor is already booked for this date.']);
-                return;
-            }
-        
-            // ✅ Insert the appointment if both doctor and patient exist
-            $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
-                      VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
-        
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
-            $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
-            $stmt->bindParam(3, $appointmentDate, PDO::PARAM_STR);
-            $stmt->bindParam(4, $purpose, PDO::PARAM_STR);
-        
-            if ($stmt->execute()) {
-                echo json_encode(['status' => true, 'message' => 'Appointment scheduled successfully']);
-            } else {
-                echo json_encode(['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]]);
-            }
-              
+    } elseif ($action === 'scheduleAppointment') {
+        $data = json_decode(file_get_contents('php://input'), true);
+    
+        $patientId = $data['patient_id'];
+        $doctorId = $data['doctor_id'];
+        $appointmentDate = $data['appointment_date'];
+        $purpose = $data['purpose'];
+    
+        $db = new Database();
+        $conn = $db->getConnection();
+    
+        // ✅ Validate if the doctor exists
+        $query = "SELECT doctor_id FROM doctors WHERE doctor_id = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+        $stmt->execute();
+        $doctorExists = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+        if (!$doctorExists) {
+            echo json_encode(['status' => false, 'message' => 'Invalid doctor ID. Doctor not found.']);
+            return;
+        }
+    
+        // ✅ Validate if the patient exists
+        $query = "SELECT patient_id FROM patients WHERE patient_id = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+        $stmt->execute();
+        $patientExists = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+        if (!$patientExists) {
+            echo json_encode(['status' => false, 'message' => 'Invalid patient ID. Patient not found.']);
+            return;
+        }
+    
+        // ✅ Check if the doctor is available on the selected date
+        $query = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'cancelled'";
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+        $stmt->bindParam(2, $appointmentDate, PDO::PARAM_STR);
+        $stmt->execute();
+        $existingAppointment = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+        if ($existingAppointment) {
+            echo json_encode(['status' => false, 'message' => 'Doctor is already booked for this date.']);
+            return;
+        }
+    
+        // ✅ Insert the appointment if both doctor and patient exist
+        $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
+                  VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
+    
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+        $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
+        $stmt->bindParam(3, $appointmentDate, PDO::PARAM_STR);
+        $stmt->bindParam(4, $purpose, PDO::PARAM_STR);
+    
+        if ($stmt->execute()) {
+            echo json_encode(['status' => true, 'message' => 'Appointment scheduled successfully']);
+        } else {
+            echo json_encode(['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]]);
+        }
+    } elseif ($action === 'updateUserProfile') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $response = $userHandler->updateUserProfile($data);
+        echo json_encode($response);
     } else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
@@ -582,16 +622,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (isset($_GET['action'])) {
-        $action = $_GET['action']; // Get the action parameter from the query string
+        $action = $_GET['action'];
 
-        // Debug log: print the action value
-        error_log("Received action: $action"); // This will log to the PHP error log
-
-        // Check for each action and handle accordingly
         if ($action === 'getDoctors') {
             $response = $userHandler->getDoctors();
             echo json_encode($response);
-
         } elseif ($action === 'getUserProfile') {
             $userId = $_GET['id'] ?? null;
             if ($userId) {
@@ -600,16 +635,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } else {
                 echo json_encode(['status' => false, 'message' => 'User ID is required']);
             }
-
         } elseif ($action === 'getPatients') {  // New condition for getting patients
             $response = $userHandler->getPatients(); // Call the new function to get patients
             echo json_encode($response);  // Return the response as JSON
-
-    } else {
-        echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+        } elseif ($action === 'getUsers') {
+            $response = $userHandler->getUsers();
+            echo json_encode($response);
+        } elseif ($action === 'getAppointments') {
+            $patientId = $_GET['patient_id'] ?? null;
+            if ($patientId) {
+                $response = $userHandler->getAppointments($patientId);
+                echo json_encode($response);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'Patient ID is required']);
+            }
+        } else {
+            echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+        }
     }
 }
-}
 
-
-?>
