@@ -71,6 +71,11 @@ class UserHandler {
         $contactNumber = $data['contactNumber'];
         $email = $data['email'];
         $password = password_hash($data['password'], PASSWORD_DEFAULT);
+        $birthplace = $data['birthplace'];
+        $nationality = $data['nationality'];
+        $religion = $data['religion'];
+        $civilStatus = $data['civilStatus'];
+        $age = $data['age'];
     
         // Check if height and weight are set, otherwise use 0
         $height = isset($data['height']) ? $data['height'] : 0;
@@ -80,26 +85,26 @@ class UserHandler {
         $role = 'user';
     
         try {
-            // Validate required fields (height and weight will be valid even if they are 0)
-            if (empty($firstName) || empty($lastName) || empty($dob) || empty($gender) || empty($homeAddress) || empty($contactNumber) || empty($email) || empty($password) || empty($medications)) {
+            // Validate required fields (including new fields)
+            if (empty($firstName) || empty($lastName) || empty($dob) || empty($gender) || empty($homeAddress) || empty($contactNumber) || empty($email) || empty($password) || empty($medications) || empty($birthplace) || empty($nationality) || empty($religion) || empty($civilStatus) || empty($age)) {
                 echo json_encode(['status' => false, 'message' => 'All fields are required']);
                 return;
             }
     
-            // Insert into users table
-            $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            // Insert into users table with new fields
+            $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role, birthplace, nationality, religion, civil_status, age) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $this->conn->prepare($query);
-            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role]);
+            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role, $birthplace, $nationality, $religion, $civilStatus, $age]);
     
             // Get the last inserted user ID
             $userId = $this->conn->lastInsertId();
     
             // Insert into patients table with new fields
-            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, height, weight, medications, created_at, updated_at) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, height, weight, medications, birthplace, nationality, religion, civil_status, age, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
             $stmt = $this->conn->prepare($query);
-            $stmt->execute([$userId, $firstName, $lastName, $gender, $email, $height, $weight, $medications]);
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $email, $height, $weight, $medications, $birthplace, $nationality, $religion, $civilStatus, $age]);
     
             echo json_encode(['status' => true, 'message' => 'User registered successfully']);
         } catch (Exception $e) {
