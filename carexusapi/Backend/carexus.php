@@ -35,23 +35,25 @@ class UserHandler {
                 'message' => 'Invalid user ID'
             ];
         }
-
-        $query = "SELECT firstname, lastname, date_of_birth, gender, home_address, contact_number, email, age, birthplace, nationality, religion, civil_status FROM users WHERE id = :id";
+    
+        // Query patients table directly using the id field
+        $query = "SELECT * FROM patients WHERE id = :id";
+        
         try {
             $stmt = $this->conn->prepare($query);
             $stmt->bindParam(':id', $userId);
             $stmt->execute();
-
-            $user = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($user) {
+    
+            $patient = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($patient) {
                 return [
                     'status' => true,
-                    'user' => $user
+                    'user' => $patient // We keep 'user' as the key for backward compatibility
                 ];
             } else {
                 return [
                     'status' => false,
-                    'message' => 'User not found'
+                    'message' => 'Patient not found'
                 ];
             }
         } catch (PDOException $e) {
@@ -466,60 +468,57 @@ public function scheduleAppointment($data) {
     }
 
     public function updateUserProfile($data) {
-        $userId = $data['id'];
-        $firstname = $data['firstname'];
-        $lastname = $data['lastname'];
-        $email = $data['email'];
-        $homeAddress = $data['home_address'];
-        $contactNumber = $data['contact_number'];
-        $height = isset($data['height']) ? $data['height'] : 0; // Default to 0 if not provided
-        $weight = isset($data['weight']) ? $data['weight'] : 0; // Default to 0 if not provided
-        $medications = $data['medications'];
-        $gender = $data['gender'];
-        $dob = $data['dob'];
-        $birthplace = $data['birthplace'];
-        $age = $data['age'];
-        $nationality = $data['nationality'];
-        $religion = $data['religion'];
-        $civilStatus = $data['civil_status']; 
-        
-        
-
-
-
-        if (!is_numeric($userId) || $userId <= 0) {
+        if (!isset($data['id']) || !is_numeric($data['id'])) {
             return [
                 'status' => false,
                 'message' => 'Invalid user ID'
             ];
         }
-
-        $query = "UPDATE users SET firstname = :firstname, lastname = :lastname, email = :email, home_address = :homeAddress, contact_number = :contactNumber, height = :height, weight = :weight, medications = :medications, gender = :gender, dob = :dob, birthplace = :birthplace, age = :age, nationality = :nationality, religion = :religion, civil_status = :civilStatus WHERE id = :id";
+    
         try {
+            // Update only the patients table
+            $query = "UPDATE patients SET 
+                email = :email,
+                height = :height,
+                weight = :weight,
+                medications = :medications,
+                birthplace = :birthplace,
+                nationality = :nationality,
+                religion = :religion,
+                civil_status = :civilStatus,
+                age = :age,
+                updated_at = NOW()
+                WHERE id = :id";
+    
             $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $userId);
-            $stmt->bindParam(':firstname', $firstname);
-            $stmt->bindParam(':lastname', $lastname);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':homeAddress', $homeAddress);
-            $stmt->bindParam(':contactNumber', $contactNumber);
-            $stmt->bindParam(':height', $height);
-            $stmt->bindParam(':weight', $weight);
-            $stmt->bindParam(':medications', $medications);
-            $stmt->bindParam(':gender', $gender);
-            $stmt->bindParam(':dob', $dob);
-            $stmt->bindParam(':birthplace', $birthplace);
-            $stmt->bindParam(':age', $age);
-            $stmt->bindParam(':nationality', $nationality);
-            $stmt->bindParam(':religion', $religion);
-            $stmt->bindParam(':civilStatus', $civilStatus);
             
-            $stmt->execute();
-
-            return [
-                'status' => true,
-                'message' => 'User profile updated successfully'
+            $params = [
+                ':id' => $data['id'],
+                ':email' => $data['email'],
+                ':height' => $data['height'],
+                ':weight' => $data['weight'],
+                ':medications' => $data['medications'],
+                ':birthplace' => $data['birthplace'],
+                ':nationality' => $data['nationality'],
+                ':religion' => $data['religion'],
+                ':civilStatus' => $data['civil_status'],
+                ':age' => $data['age']
             ];
+    
+            $stmt->execute($params);
+    
+            if ($stmt->rowCount() > 0) {
+                return [
+                    'status' => true,
+                    'message' => 'Profile updated successfully'
+                ];
+            } else {
+                return [
+                    'status' => false,
+                    'message' => 'No changes made or patient not found'
+                ];
+            }
+    
         } catch (PDOException $e) {
             return [
                 'status' => false,
@@ -527,7 +526,140 @@ public function scheduleAppointment($data) {
             ];
         }
     }
+    // Add this to your UserHandler class
+
+public function getPatientHistory($patientId) {
+    if (!is_numeric($patientId) || $patientId <= 0) {
+        return [
+            'status' => false,
+            'message' => 'Invalid patient ID'
+        ];
+    }
+
+    $query = "SELECT * FROM patient_history WHERE patient_id = :patientId";
+    
+    try {
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':patientId', $patientId, PDO::PARAM_INT);
+        $stmt->execute();
+        $history = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($history) {
+            return [
+                'status' => true,
+                'history' => $history
+            ];
+        } else {
+            return [
+                'status' => false,
+                'message' => 'No history found for this patient'
+            ];
+        }
+    } catch (PDOException $e) {
+        return [
+            'status' => false,
+            'message' => 'Database error: ' . $e->getMessage()
+        ];
+    }
 }
+
+public function updatePatientHistory($data) {
+    if (!isset($data['patient_id']) || !is_numeric($data['patient_id'])) {
+        return [
+            'status' => false,
+            'message' => 'Invalid patient ID'
+        ];
+    }
+
+    $query = "INSERT INTO patient_history (
+        patient_id, 
+        medical_history, 
+        surgical_history, 
+        medications, 
+        allergies, 
+        injuries_accidents, 
+        special_needs, 
+        blood_transfusion, 
+        present_history
+    ) VALUES (
+        :patient_id,
+        :medical_history,
+        :surgical_history,
+        :medications,
+        :allergies,
+        :injuries_accidents,
+        :special_needs,
+        :blood_transfusion,
+        :present_history
+    ) ON DUPLICATE KEY UPDATE 
+        medical_history = VALUES(medical_history),
+        surgical_history = VALUES(surgical_history),
+        medications = VALUES(medications),
+        allergies = VALUES(allergies),
+        injuries_accidents = VALUES(injuries_accidents),
+        special_needs = VALUES(special_needs),
+        blood_transfusion = VALUES(blood_transfusion),
+        present_history = VALUES(present_history)";
+
+    try {
+        $stmt = $this->conn->prepare($query);
+        $stmt->execute([
+            ':patient_id' => $data['patient_id'],
+            ':medical_history' => $data['medical_history'] ?? null,
+            ':surgical_history' => $data['surgical_history'] ?? null,
+            ':medications' => $data['medications'] ?? null,
+            ':allergies' => $data['allergies'] ?? null,
+            ':injuries_accidents' => $data['injuries_accidents'] ?? null,
+            ':special_needs' => $data['special_needs'] ?? null,
+            ':blood_transfusion' => $data['blood_transfusion'] ?? 'No',
+            ':present_history' => $data['present_history'] ?? null
+        ]);
+
+        return [
+            'status' => true,
+            'message' => 'Patient history updated successfully'
+        ];
+    } catch (PDOException $e) {
+        return [
+            'status' => false,
+            'message' => 'Database error: ' . $e->getMessage()
+        ];
+    }
+}
+public function getPatientId($userId) {
+    // Modified query to get patient_id using the user's id from the patients table
+    $query = "SELECT patient_id FROM patients WHERE id = :userId LIMIT 1";
+    
+    try {
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result && isset($result['patient_id'])) {
+            return [
+                'status' => true,
+                'patient_id' => $result['patient_id']
+            ];
+        } else {
+            // Add logging for debugging
+            error_log("No patient found for user ID: " . $userId);
+            return [
+                'status' => false,
+                'message' => 'No patient record found for this user'
+            ];
+        }
+    } catch (PDOException $e) {
+        error_log("Database error in getPatientId: " . $e->getMessage());
+        return [
+            'status' => false,
+            'message' => 'Database error: ' . $e->getMessage()
+        ];
+    }
+}
+}
+
 
 // Route user actions
 $userHandler = new UserHandler();
@@ -682,9 +814,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true);
         $response = $userHandler->updateUserProfile($data);
         echo json_encode($response);
-    } else {
+        
+    } 
+    elseif ($action === 'updatePatientHistory') {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $response = $userHandler->updatePatientHistory($data);
+        echo json_encode($response);
+    }
+    else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
+    
 }
 
 
@@ -705,9 +845,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } else {
                 echo json_encode(['status' => false, 'message' => 'User ID is required']);
             }
-        } elseif ($action === 'getPatients') {  // New condition for getting patients
-            $response = $userHandler->getPatients(); // Call the new function to get patients
-            echo json_encode($response);  // Return the response as JSON
+        } elseif ($action === 'getPatients') {
+            $response = $userHandler->getPatients();
+            echo json_encode($response);
         } elseif ($action === 'getUsers') {
             $response = $userHandler->getUsers();
             echo json_encode($response);
@@ -719,9 +859,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             } else {
                 echo json_encode(['status' => false, 'message' => 'Patient ID is required']);
             }
-        } else {
-            echo json_encode(['status' => false, 'message' => 'Action parameter is missing']);
+        } // Add the new getPatientHistory route here
+        elseif ($action === 'getPatientHistory') {
+            $patientId = $_GET['patient_id'] ?? null;
+            if ($patientId) {
+                $response = $userHandler->getPatientHistory($patientId);
+                echo json_encode($response);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'Patient ID is required']);
+            }
         }
     }
+    if ($action === 'getPatientId') {
+        $userId = $_GET['user_id'] ?? null;
+        if ($userId) {
+            $response = $userHandler->getPatientId($userId);
+            echo json_encode($response);
+            exit; // Add exit to prevent further execution
+        } else {
+            http_response_code(400);
+            echo json_encode(['status' => false, 'message' => 'User ID is required']);
+            exit;
+        }
+    }
+
 }
+
 
