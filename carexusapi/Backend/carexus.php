@@ -67,10 +67,10 @@ class UserHandler {
     public function register($data) {
         $firstName = $data['firstName'];
         $lastName = $data['lastName'];
-        $dob = $data['dob'];
+        $date_of_birth = $data['date_of_birth'];
         $gender = $data['gender'];
-        $homeAddress = $data['homeAddress'];
-        $contactNumber = $data['contactNumber'];
+        $home_address = $data['home_address'];
+        $contact_number = $data['contact_number'];
         $email = $data['email'];
         $password = password_hash($data['password'], PASSWORD_DEFAULT);
         $birthplace = $data['birthplace'];
@@ -88,7 +88,7 @@ class UserHandler {
     
         try {
             // Validate required fields (including new fields)
-            if (empty($firstName) || empty($lastName) || empty($dob) || empty($gender) || empty($homeAddress) || empty($contactNumber) || empty($email) || empty($password) || empty($medications) || empty($birthplace) || empty($nationality) || empty($religion) || empty($civilStatus) || empty($age)) {
+            if (empty($firstName) || empty($lastName) || empty($date_of_birth) || empty($gender) || empty($home_address) || empty($contact_number) || empty($email) || empty($password) || empty($medications) || empty($birthplace) || empty($nationality) || empty($religion) || empty($civilStatus) || empty($age)) {
                 echo json_encode(['status' => false, 'message' => 'All fields are required']);
                 return;
             }
@@ -97,16 +97,16 @@ class UserHandler {
             $query = "INSERT INTO users (firstname, lastname, date_of_birth, gender, home_address, contact_number, email, password, role, birthplace, nationality, religion, civil_status, age) 
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $this->conn->prepare($query);
-            $stmt->execute([$firstName, $lastName, $dob, $gender, $homeAddress, $contactNumber, $email, $password, $role, $birthplace, $nationality, $religion, $civilStatus, $age]);
+            $stmt->execute([$firstName, $lastName, $date_of_birth, $gender, $home_address, $contact_number, $email, $password, $role, $birthplace, $nationality, $religion, $civilStatus, $age]);
     
             // Get the last inserted user ID
             $userId = $this->conn->lastInsertId();
     
             // Insert into patients table with new fields
-            $query = "INSERT INTO patients (id, firstname, lastname, gender, email, height, weight, medications, birthplace, nationality, religion, civil_status, age, created_at, updated_at) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
+            $query = "INSERT INTO patients (id, firstname, lastname, gender, date_of_birth, home_address, contact_number, email, height, weight, medications, birthplace, nationality, religion, civil_status, age, created_at, updated_at) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())";
             $stmt = $this->conn->prepare($query);
-            $stmt->execute([$userId, $firstName, $lastName, $gender, $email, $height, $weight, $medications, $birthplace, $nationality, $religion, $civilStatus, $age]);
+            $stmt->execute([$userId, $firstName, $lastName, $gender, $date_of_birth, $home_address, $contact_number, $email, $height, $weight, $medications, $birthplace, $nationality, $religion, $civilStatus, $age]);
     
             echo json_encode(['status' => true, 'message' => 'User registered successfully']);
         } catch (Exception $e) {
@@ -486,6 +486,9 @@ public function scheduleAppointment($data) {
                 nationality = :nationality,
                 religion = :religion,
                 civil_status = :civilStatus,
+                date_of_birth = :date,
+                contact_number = :contact_number,
+                home_address = :home_address,
                 age = :age,
                 updated_at = NOW()
                 WHERE id = :id";
@@ -502,6 +505,9 @@ public function scheduleAppointment($data) {
                 ':nationality' => $data['nationality'],
                 ':religion' => $data['religion'],
                 ':civilStatus' => $data['civil_status'],
+                ':date' => $data['date_of_birth'],
+                ':contact_number' => $data['contact_number'],
+                ':home_address' => $data['home_address'],
                 ':age' => $data['age']
             ];
     
@@ -674,9 +680,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validate required fields
         $requiredFields = [
-            'firstName', 'lastName', 'dob', 'gender', 
-            'homeAddress', 'contactNumber', 'email', 
-            'password', 'medications'
+            'firstName', 'lastName', 'date_of_birth', 'gender', 
+            'home_address', 'contact_number', 'email', 
+            'password', 'medications', 
         ];
 
         // Check for non-numeric fields (string fields)
