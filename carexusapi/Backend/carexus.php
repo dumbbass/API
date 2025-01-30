@@ -210,7 +210,16 @@ class UserHandler {
     //scheduling lineeeee.........
 
     public function getDoctors() {
-        $query = "SELECT doctor_id, firstname, lastname, email FROM doctors";
+        // Modify query to include user_id (assuming there's a relation between users and doctors)
+        $query = "
+            SELECT 
+                doctors.doctor_id, 
+                doctors.firstname, 
+                doctors.lastname, 
+                doctors.email, 
+                users.id AS user_id
+            FROM doctors
+            JOIN users ON users.email = doctors.email"; // Assuming 'email' is the link between users and doctors
         
         try {
             $stmt = $this->conn->prepare($query);
@@ -219,7 +228,7 @@ class UserHandler {
             $doctors = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
             if ($doctors) {
-                // Handle null values
+                // Handle null values and ensure consistency
                 foreach ($doctors as &$doctor) {
                     $doctor['firstname'] = $doctor['firstname'] ?? 'Unknown';
                     $doctor['lastname'] = $doctor['lastname'] ?? 'Unknown';
@@ -242,6 +251,7 @@ class UserHandler {
             ];
         }
     }
+    
     
     public function getPatients() {
         // Modify query to include user_id (assuming a relation exists)
@@ -632,6 +642,41 @@ public function updatePatientHistory($data) {
         ];
     }
 }
+
+public function getDoctorId($userId) {
+    // Modified query to get doctor_id using the user's id from the doctors table
+    $query = "SELECT doctor_id FROM doctors WHERE id = :userId LIMIT 1";
+    
+    try {
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':userId', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+        
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result && isset($result['doctor_id'])) {
+            return [
+                'status' => true,
+                'doctor_id' => $result['doctor_id']
+            ];
+        } else {
+            // Add logging for debugging
+            error_log("No doctor found for user ID: " . $userId);
+            return [
+                'status' => false,
+                'message' => 'No doctor record found for this user'
+            ];
+        }
+    } catch (PDOException $e) {
+        error_log("Database error in getDoctorId: " . $e->getMessage());
+        return [
+            'status' => false,
+            'message' => 'Database error: ' . $e->getMessage()
+        ];
+    }
+}
+
+
 public function getPatientId($userId) {
     // Modified query to get patient_id using the user's id from the patients table
     $query = "SELECT patient_id FROM patients WHERE id = :userId LIMIT 1";
@@ -664,6 +709,96 @@ public function getPatientId($userId) {
         ];
     }
 }
+
+// 1. Doctor sets available schedule
+public function setAvailableSchedule($data) {
+    $doctorId = $data['doctor_id'] ?? null;
+    $date = $data['date'] ?? null;
+    $timeSlots = $data['time_slot'] ?? [];
+
+    if (!$doctorId || !$date || empty($timeSlots)) {
+        return ['status' => false, 'message' => 'Doctor ID, date, and time slots are required'];
+    }
+
+    $query = "INSERT INTO doctor_schedules (doctor_id, available_date, time_slot) VALUES (?, ?, ?)";
+    $stmt = $this->conn->prepare($query);
+
+    foreach ($timeSlots as $timeSlot) {
+        $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+        $stmt->bindParam(2, $date, PDO::PARAM_STR);
+        $stmt->bindParam(3, $timeSlot, PDO::PARAM_STR);
+
+        if (!$stmt->execute()) {
+            return ['status' => false, 'message' => 'Error inserting schedule'];
+        }
+    }
+
+    return ['status' => true, 'message' => 'Schedule set successfully'];
+}
+
+
+// 2. Fetch available schedules for patients
+public function getAvailableSchedules($doctorId) {
+    $query = "SELECT * FROM doctor_schedule WHERE doctor_id = ?";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// 3. Patient books an available slot
+public function bookAppointment($data) {
+    $patientId = $data['patient_id'];
+    $doctorId = $data['doctor_id'];
+    $date = $data['date'];
+    $time = $data['time'];
+    $purpose = $data['purpose'];
+
+    // Check if the slot is still available
+    $query = "SELECT time_slots FROM doctor_schedule WHERE doctor_id = ? AND date = ?";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+    $stmt->bindParam(2, $date, PDO::PARAM_STR);
+    $stmt->execute();
+    $schedule = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$schedule) {
+        return ['status' => false, 'message' => 'No available schedule for this doctor.'];
+    }
+
+    $availableSlots = json_decode($schedule['time_slots'], true);
+    if (!in_array($time, $availableSlots)) {
+        return ['status' => false, 'message' => 'Selected time slot is no longer available.'];
+    }
+
+    // Remove booked slot and update schedule
+    $updatedSlots = array_diff($availableSlots, [$time]);
+    $query = "UPDATE doctor_schedule SET time_slots = ? WHERE doctor_id = ? AND date = ?";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(1, json_encode($updatedSlots), PDO::PARAM_STR);
+    $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
+    $stmt->bindParam(3, $date, PDO::PARAM_STR);
+    $stmt->execute();
+
+    // Insert into appointments table
+    $query = "INSERT INTO appointments (patient_id, doctor_id, date, time, purpose, status) 
+              VALUES (?, ?, ?, ?, ?, 'pending')";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+    $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
+    $stmt->bindParam(3, $date, PDO::PARAM_STR);
+    $stmt->bindParam(4, $time, PDO::PARAM_STR);
+    $stmt->bindParam(5, $purpose, PDO::PARAM_STR);
+
+    if ($stmt->execute()) {
+        return ['status' => true, 'message' => 'Appointment booked successfully'];
+    } else {
+        return ['status' => false, 'message' => 'Failed to book appointment'];
+    }
+}
+
+
+
 }
 
 
@@ -826,7 +961,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true);
         $response = $userHandler->updatePatientHistory($data);
         echo json_encode($response);
-    }
+    } elseif ($action === 'setAvailableSchedule') {
+        // Decode incoming JSON data
+        $data = json_decode(file_get_contents('php://input'), true);
+    
+        // Call the method from the UserHandler instance
+        $response = $userHandler->setAvailableSchedule($data);
+    
+        // Return the response from the method
+        echo json_encode($response);
+    }    
     else {
         echo json_encode(['status' => false, 'message' => 'Invalid action']);
     }
@@ -887,8 +1031,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             echo json_encode(['status' => false, 'message' => 'User ID is required']);
             exit;
         }
-    }
+    } else if ($action === 'getDoctorId') {
+        $userId = $_GET['user_id'] ?? null;
+        if ($userId) {
+            $response = $userHandler->getDoctorId($userId);
+            echo json_encode($response);
+            exit; // Add exit to prevent further execution
+        } else {
+            http_response_code(400);
+            echo json_encode(['status' => false, 'message' => 'User ID is required']);
+            exit;
+        }
 
+}
 }
 
 
