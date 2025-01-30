@@ -410,7 +410,7 @@ public function scheduleAppointment($data) {
     }    
     
     public function getUsers() {
-        $query = "SELECT id, firstname, lastname, gender, email,  contact_number, home_address FROM users";
+        $query = "SELECT id, firstname, lastname, gender, email,  contact_number, home_address, birthplace, age, nationality, religion, civil_status FROM users";
         
         try {
             $stmt = $this->conn->prepare($query);
