@@ -375,18 +375,6 @@ public function scheduleAppointment($data) {
             return ['status' => false, 'message' => 'Failed to set appointment time: ' . $stmt->errorInfo()[2]];
         }
     }    
-    public function deleteAppointment($appointmentId) {
-        $query = "DELETE FROM appointments WHERE appointment_id = ?";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindValue(1, (int)$appointmentId, PDO::PARAM_INT); // Ensure integer type
-    
-        if ($stmt->execute()) {
-            return ['status' => true, 'message' => 'Appointment deleted successfully'];
-        } else {
-            return ['status' => false, 'message' => 'Failed to delete appointment'];
-        }
-    }
-    
 
     public function updateAppointmentStatus($data) {
         $appointment_id = $data['appointment_id'];
