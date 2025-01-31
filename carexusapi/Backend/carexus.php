@@ -739,12 +739,17 @@ public function setAvailableSchedule($data) {
 
 // 2. Fetch available schedules for patients
 public function getAvailableSchedules($doctorId) {
-    $query = "SELECT * FROM doctor_schedule WHERE doctor_id = ?";
+    if ($this->conn === null) {
+        throw new Exception("Database connection not established.");
+    }
+
+    $query = "SELECT * FROM doctor_schedules WHERE doctor_id = ?";
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
 
 // 3. Patient books an available slot
 public function bookAppointment($data) {
@@ -755,7 +760,7 @@ public function bookAppointment($data) {
     $purpose = $data['purpose'];
 
     // Check if the slot is still available
-    $query = "SELECT time_slots FROM doctor_schedule WHERE doctor_id = ? AND date = ?";
+    $query = "SELECT time_slots FROM doctor_schedules WHERE doctor_id = ? AND date = ?";
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
     $stmt->bindParam(2, $date, PDO::PARAM_STR);
@@ -773,7 +778,7 @@ public function bookAppointment($data) {
 
     // Remove booked slot and update schedule
     $updatedSlots = array_diff($availableSlots, [$time]);
-    $query = "UPDATE doctor_schedule SET time_slots = ? WHERE doctor_id = ? AND date = ?";
+    $query = "UPDATE doctor_schedules SET time_slots = ? WHERE doctor_id = ? AND date = ?";
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(1, json_encode($updatedSlots), PDO::PARAM_STR);
     $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
@@ -1017,6 +1022,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 echo json_encode($response);
             } else {
                 echo json_encode(['status' => false, 'message' => 'Patient ID is required']);
+            }
+        }
+        elseif ($action === 'getAvailableSchedules') {
+            $doctorId = $_GET['doctorId'] ?? null;
+            if ($doctorId) {
+                $response = $userHandler->getAvailableSchedules($doctorId);
+                echo json_encode($response);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'Doctor ID is required']);
             }
         }
     }
