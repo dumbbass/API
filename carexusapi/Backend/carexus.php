@@ -300,66 +300,69 @@ class UserHandler {
 // Function to schedule an appointment
 public function scheduleAppointment($data) {
     // Fetching the patient and doctor details from the request
-    $patientId = $data['patient_id'];  // Patient ID added here
+    $patientId = $data['patient_id'];  
     $doctorId = $data['doctor_id'];
-    $appointmentDate = $data['appointment_date'];
+    $appointmentDate = $data['date']; // ✅ Fixed key name
+    $appointmentTime = $data['time']; // ✅ Added time
     $purpose = $data['purpose'];
 
     // Database connection
     $db = new Database();
     $conn = $db->getConnection();
 
-    // Step 1: Check if the doctor has an available appointed_time
-    $query = "SELECT appointed_time FROM doctors WHERE doctor_id = ?";
+    // Step 1: Validate if the doctor exists
+    $query = "SELECT doctor_id FROM doctors WHERE doctor_id = ?";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
     $stmt->execute();
-    $doctor = $stmt->fetch(PDO::FETCH_ASSOC);
+    $doctorExists = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$doctor || !$doctor['appointed_time']) {
-        return [
-            'status' => false,
-            'message' => 'Doctor does not have an appointed time set or is unavailable'
-        ];
+    if (!$doctorExists) {
+        return ['status' => false, 'message' => 'Invalid doctor ID. Doctor not found.'];
     }
 
-    // Step 2: Validate the appointment date availability
-    $query = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'cancelled'";
+    // Step 2: Validate if the patient exists
+    $query = "SELECT patient_id FROM patients WHERE patient_id = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+    $stmt->execute();
+    $patientExists = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$patientExists) {
+        return ['status' => false, 'message' => 'Invalid patient ID. Patient not found.'];
+    }
+
+    // Step 3: Check if the doctor is available on the selected date and time
+    $query = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'cancelled'";
     $stmt = $conn->prepare($query);
     $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
     $stmt->bindParam(2, $appointmentDate, PDO::PARAM_STR);
+    $stmt->bindParam(3, $appointmentTime, PDO::PARAM_STR);
     $stmt->execute();
     $existingAppointment = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($existingAppointment) {
-        return [
-            'status' => false,
-            'message' => 'Doctor is already booked for this date'
-        ];
+        return ['status' => false, 'message' => 'Doctor is already booked for this date and time.'];
     }
 
-    // Step 3: Insert the new appointment with patient_id
-    $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
-              VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
+    // Step 4: Insert the new appointment with 'pending' status
+    $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, purpose, status, created_at, updated_at) 
+              VALUES (?, ?, ?, ?, ?, 'pending', NOW(), NOW())";
 
     $stmt = $conn->prepare($query);
     $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
     $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
     $stmt->bindParam(3, $appointmentDate, PDO::PARAM_STR);
-    $stmt->bindParam(4, $purpose, PDO::PARAM_STR);
+    $stmt->bindParam(4, $appointmentTime, PDO::PARAM_STR);
+    $stmt->bindParam(5, $purpose, PDO::PARAM_STR);
 
     if ($stmt->execute()) {
-        return [
-            'status' => true,
-            'message' => 'Appointment scheduled successfully'
-        ];
+        return ['status' => true, 'message' => 'Appointment scheduled successfully'];
     } else {
-        return [
-            'status' => false,
-            'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]
-        ];
+        return ['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]];
     }
 }
+
     
     public function setAppointmentTime($appointmentId, $time) {
         $db = new Database();
@@ -896,67 +899,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'scheduleAppointment') {
         $data = json_decode(file_get_contents('php://input'), true);
     
+        // Validate required fields
+        if (!isset($data['patient_id'], $data['doctor_id'], $data['date'], $data['time'], $data['purpose'])) {
+            echo json_encode(['status' => false, 'message' => 'Missing required fields']);
+            return;
+        }
+    
         $patientId = $data['patient_id'];
         $doctorId = $data['doctor_id'];
-        $appointmentDate = $data['appointment_date'];
+        $appointmentDate = $data['date']; // ✅ Fixed incorrect key
+        $appointmentTime = $data['time']; // ✅ Added time field
         $purpose = $data['purpose'];
     
         $db = new Database();
         $conn = $db->getConnection();
     
-        // ✅ Validate if the doctor exists
-        $query = "SELECT doctor_id FROM doctors WHERE doctor_id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
-        $stmt->execute();
-        $doctorExists = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            // ✅ Validate if the doctor exists
+            $stmt = $conn->prepare("SELECT doctor_id FROM doctors WHERE doctor_id = ?");
+            $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+            $stmt->execute();
+            if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+                echo json_encode(['status' => false, 'message' => 'Invalid doctor ID. Doctor not found.']);
+                return;
+            }
     
-        if (!$doctorExists) {
-            echo json_encode(['status' => false, 'message' => 'Invalid doctor ID. Doctor not found.']);
-            return;
+            // ✅ Validate if the patient exists
+            $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
+            $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+            $stmt->execute();
+            if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
+                echo json_encode(['status' => false, 'message' => 'Invalid patient ID. Patient not found.']);
+                return;
+            }
+    
+            // ✅ Check if the doctor is already booked at the same date and time
+            $stmt = $conn->prepare("SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'cancelled'");
+            $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
+            $stmt->bindParam(2, $appointmentDate, PDO::PARAM_STR);
+            $stmt->bindParam(3, $appointmentTime, PDO::PARAM_STR);
+            $stmt->execute();
+    
+            if ($stmt->fetch(PDO::FETCH_ASSOC)) {
+                echo json_encode(['status' => false, 'message' => 'Doctor is already booked for this date and time.']);
+                return;
+            }
+    
+            // ✅ Insert the appointment with 'pending' status
+            $stmt = $conn->prepare("
+                INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, purpose, status, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, 'pending', NOW(), NOW())");
+            $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
+            $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
+            $stmt->bindParam(3, $appointmentDate, PDO::PARAM_STR);
+            $stmt->bindParam(4, $appointmentTime, PDO::PARAM_STR);
+            $stmt->bindParam(5, $purpose, PDO::PARAM_STR);
+    
+            if ($stmt->execute()) {
+                echo json_encode(['status' => true, 'message' => 'Appointment scheduled successfully']);
+            } else {
+                echo json_encode(['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]]);
+            }
+        } catch (Exception $e) {
+            echo json_encode(['status' => false, 'message' => 'An error occurred: ' . $e->getMessage()]);
         }
-    
-        // ✅ Validate if the patient exists
-        $query = "SELECT patient_id FROM patients WHERE patient_id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
-        $stmt->execute();
-        $patientExists = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-        if (!$patientExists) {
-            echo json_encode(['status' => false, 'message' => 'Invalid patient ID. Patient not found.']);
-            return;
-        }
-    
-        // ✅ Check if the doctor is available on the selected date
-        $query = "SELECT * FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'cancelled'";
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $doctorId, PDO::PARAM_INT);
-        $stmt->bindParam(2, $appointmentDate, PDO::PARAM_STR);
-        $stmt->execute();
-        $existingAppointment = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-        if ($existingAppointment) {
-            echo json_encode(['status' => false, 'message' => 'Doctor is already booked for this date.']);
-            return;
-        }
-    
-        // ✅ Insert the appointment if both doctor and patient exist
-        $query = "INSERT INTO appointments (patient_id, doctor_id, appointment_date, purpose, status, created_at, updated_at) 
-                  VALUES (?, ?, ?, ?, 'pending', NOW(), NOW())";
-    
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(1, $patientId, PDO::PARAM_INT);
-        $stmt->bindParam(2, $doctorId, PDO::PARAM_INT);
-        $stmt->bindParam(3, $appointmentDate, PDO::PARAM_STR);
-        $stmt->bindParam(4, $purpose, PDO::PARAM_STR);
-    
-        if ($stmt->execute()) {
-            echo json_encode(['status' => true, 'message' => 'Appointment scheduled successfully']);
-        } else {
-            echo json_encode(['status' => false, 'message' => 'Failed to schedule appointment: ' . $stmt->errorInfo()[2]]);
-        }
-    } elseif ($action === 'updateUserProfile') {
+    }
+     elseif ($action === 'updateUserProfile') {
         $data = json_decode(file_get_contents('php://input'), true);
         $response = $userHandler->updateUserProfile($data);
         echo json_encode($response);
